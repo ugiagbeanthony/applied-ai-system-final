@@ -92,7 +92,7 @@ These numbers only show that the coach follows the style rules I set. They don't
 **What I learned**
 - If you follow the coach you win every Easy and Normal game, so the advice holds up. Hard is only 62% because five guesses can cover at most 31 of the 50 numbers, even with perfect play. That's a problem with the game's balance, not the coach, and I only saw it because I ran the evaluation.
 - My first fix for the coach was wrong. I made the offline hint avoid suggesting the secret, and the evaluation showed that it broke the strategy and dropped Hard to 0%. I undid it, since the coach picks its number without knowing the secret and so isn't revealing anything.
-- Not checked yet: I've only tested the real model call with mocks, and I haven't run the Streamlit UI through an automated test on this machine.
+- Not checked yet: I've only tested the real model call with mocks. I did load the Streamlit app and play a guess with Streamlit's AppTest, but that was a manual check, not part of the test suite.
 
 ## Execution Evidence
 

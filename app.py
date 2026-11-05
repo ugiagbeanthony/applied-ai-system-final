@@ -56,11 +56,13 @@ st.info(
 )
 
 with st.expander("Developer Debug Info"):
-    st.write("Secret:", st.session_state.secret)
-    st.write("Attempts:", st.session_state.attempts)
-    st.write("Score:", st.session_state.score)
-    st.write("Difficulty:", difficulty)
-    st.write("History:", st.session_state.history)
+    # st.text instead of st.write: st.write on a list imports pandas, which some
+    # locked-down Windows setups block.
+    st.text(f"Secret: {st.session_state.secret}")
+    st.text(f"Attempts: {st.session_state.attempts}")
+    st.text(f"Score: {st.session_state.score}")
+    st.text(f"Difficulty: {difficulty}")
+    st.text(f"History: {st.session_state.history}")
 
 raw_guess = st.text_input("Enter your guess:", key=f"guess_input_{difficulty}")
 
