@@ -139,4 +139,3 @@ if show_hint and st.session_state.coach and st.session_state.status == "playing"
     st.info(f"🧠 {label}: {text}")
 
 st.divider()
-st.caption("Hints are grounded in knowledge/strategy.md and checked so they never reveal the secret.")
