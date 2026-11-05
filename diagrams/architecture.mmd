@@ -1,0 +1,51 @@
+flowchart TD
+    User([Player / Browser])
+
+    subgraph UI["Streamlit App (app.py)"]
+        Sidebar[Sidebar: difficulty selector]
+        Input[Guess input + Submit / New Game buttons]
+        State[(st.session_state: secret, attempts, score, history)]
+        Display[Hints, score and Developer Debug Info]
+    end
+
+    subgraph Logic["Game Logic (logic_utils.py)"]
+        Range[get_range_for_difficulty]
+        Parse[parse_guess]
+        Check[check_guess]
+        Score[update_score]
+    end
+
+    subgraph QA["Testing"]
+        Tests[tests/test_game_logic.py - pytest]
+    end
+
+    User -->|plays| Input
+    User -->|chooses level| Sidebar
+    Sidebar --> Range
+    Range -->|low, high| State
+    Input --> Parse
+    Parse -->|valid int / error| Check
+    State -->|secret number| Check
+    Check -->|outcome + message| Score
+    Score -->|new score| State
+    Check --> Display
+    State --> Display
+    Display --> User
+
+    Tests -.->|verifies| Parse
+    Tests -.->|verifies| Check
+    Tests -.->|verifies| Score
+    Tests -.->|verifies| Range
+
+    subgraph Coach["AI Hint Coach (hint_coach.py)"]
+        KB[(knowledge/strategy.md)]
+        Retrieve[retrieve passages]
+        LLM[Model hint or offline hint]
+        Guard{Leak / length check}
+    end
+    Check --> Retrieve
+    KB --> Retrieve
+    Retrieve --> LLM
+    LLM --> Guard
+    Guard -->|ok| Display
+    Guard -->|rejected: retry once, then local hint| LLM

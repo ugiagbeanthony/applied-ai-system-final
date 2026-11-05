@@ -11,8 +11,27 @@ It wrote the code, ran away, and now the game is unplayable.
 
 ## 🛠️ Setup
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run the broken app: `python -m streamlit run app.py`
+```
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1      # macOS/Linux/Git Bash: source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m streamlit run app.py
+python -m pytest
+```
+
+Optional: set `ANTHROPIC_API_KEY` to get model-written hints. Without it the coach builds hints offline from the same retrieved notes, so the app runs either way. Activity is logged to `game.log`.
+
+## 🤖 AI Feature: Hint Coach (RAG + guardrails)
+
+After each wrong guess the coach decides what advice the player sees:
+
+1. **Retrieve**: the game situation (last result, remaining range, attempts left) is turned into a query and matched against `knowledge/strategy.md`.
+2. **Generate**: the retrieved notes plus the live range go into the model prompt, so the hint depends on them. Offline, the hint is built directly from the retrieved note and the narrowed range.
+3. **Check**: a guardrail rejects any hint that contains the secret number or is too long.
+4. **Retry / fall back**: one retry, then a safe local hint. API errors are caught and logged.
+
+See `diagrams/architecture.mmd` (PNG in `assets/`) and `hint_coach.py`. Tests for retrieval, the guardrail, retry and fallback are in `tests/test_game_logic.py`.
 
 ## 🕵️‍♂️ Your Mission
 
