@@ -1,51 +1,59 @@
 flowchart TD
-    User([Player / Browser])
+    %% INPUT
+    Player([Player / Browser])
 
     subgraph UI["Streamlit App (app.py)"]
-        Sidebar[Sidebar: difficulty selector]
-        Input[Guess input + Submit / New Game buttons]
-        State[(st.session_state: secret, attempts, score, history)]
-        Display[Hints, score and Developer Debug Info]
+        Input[Guess input and difficulty]
+        State[(Session state: secret, attempts, score, history)]
+        Display[Result, coach hint and score]
     end
 
     subgraph Logic["Game Logic (logic_utils.py)"]
-        Range[get_range_for_difficulty]
         Parse[parse_guess]
         Check[check_guess]
         Score[update_score]
+        Narrow[narrow_range]
     end
-
-    subgraph QA["Testing"]
-        Tests[tests/test_game_logic.py - pytest]
-    end
-
-    User -->|plays| Input
-    User -->|chooses level| Sidebar
-    Sidebar --> Range
-    Range -->|low, high| State
-    Input --> Parse
-    Parse -->|valid int / error| Check
-    State -->|secret number| Check
-    Check -->|outcome + message| Score
-    Score -->|new score| State
-    Check --> Display
-    State --> Display
-    Display --> User
-
-    Tests -.->|verifies| Parse
-    Tests -.->|verifies| Check
-    Tests -.->|verifies| Score
-    Tests -.->|verifies| Range
 
     subgraph Coach["AI Hint Coach (hint_coach.py)"]
         KB[(knowledge/strategy.md)]
-        Retrieve[retrieve passages]
-        LLM[Model hint or offline hint]
-        Guard{Leak / length check}
+        Retriever[Retriever: match situation to notes]
+        Agent[Generator: model hint, or offline hint if no key]
+        Guard{Evaluator: leaks secret or too long?}
+        Fallback[Safe local hint]
     end
-    Check --> Retrieve
-    KB --> Retrieve
-    Retrieve --> LLM
-    LLM --> Guard
-    Guard -->|ok| Display
-    Guard -->|rejected: retry once, then local hint| LLM
+
+    subgraph QA["Testing and Monitoring"]
+        Tests[pytest: logic, retrieval, guardrail, retry, fallback]
+        Log[game.log: guesses, retrieval, rejections, errors]
+    end
+
+    %% PROCESS
+    Player -->|guess| Input
+    Input --> Parse --> Check
+    State -->|secret| Check
+    Check -->|outcome| Score --> State
+    Check --> Narrow
+    Narrow -->|remaining range| Retriever
+    KB --> Retriever
+    Retriever -->|top notes| Agent
+    Agent --> Guard
+    Guard -->|rejected: retry once| Agent
+    Guard -->|rejected twice or API error| Fallback
+    Guard -->|approved| Display
+    Fallback --> Display
+
+    %% OUTPUT AND HUMAN CHECK
+    Display -->|hint and result| Player
+    Player -.->|human check: is the hint helpful and honest?| Display
+
+    %% TESTING
+    Tests -.->|verifies| Parse
+    Tests -.->|verifies| Check
+    Tests -.->|verifies| Score
+    Tests -.->|verifies| Retriever
+    Tests -.->|verifies| Guard
+    Tests -.->|verifies| Fallback
+    Coach -.->|logs| Log
+    Logic -.->|logs| Log
+    Log -.->|developer reviews| Tests
