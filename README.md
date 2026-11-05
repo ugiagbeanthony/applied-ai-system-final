@@ -8,9 +8,9 @@ For this project I added an **AI hint coach** to the fixed game. After each wron
 
 ## Architecture Overview
 
-The diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd) and the image is in [`assets/`](assets/architecture.png).
+The diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd) and the image is in [`assets/`](assets/architecture.jpeg).
 
-![System architecture](assets/architecture.png)
+![System architecture](assets/architecture.jpeg)
 
 Here is how a guess moves through the system:
 
