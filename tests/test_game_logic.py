@@ -101,3 +101,10 @@ def test_model_error_falls_back(monkeypatch):
 
     monkeypatch.setattr(hint_coach, "_llm_hint", boom)
     assert get_hint(SITUATION, secret=30)[1] == "local"
+
+
+def test_local_hint_never_suggests_the_secret(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    situation = {"low": 26, "high": 49, "last_outcome": "Too Low", "attempts_left": 3}
+    text, _ = get_hint(situation, secret=37)  # midpoint of 26..49 is 37
+    assert not leaks_secret(text.split("Tip:")[0], 37)
