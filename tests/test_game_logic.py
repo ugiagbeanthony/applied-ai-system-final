@@ -70,9 +70,21 @@ def test_guardrail_detects_leak():
 
 def test_local_hint_uses_range_and_never_leaks(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    text, source = get_hint(SITUATION, secret=30)
+    text, source = get_hint(SITUATION, secret=30, style="plain")
     assert source == "local"
     assert "between 1 and 49" in text and "Try 25" in text
+
+
+def test_coach_style_is_short_and_specific(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    text, _ = get_hint(SITUATION, secret=30)
+    assert len(text.split()) <= 25
+    assert "Try 25" in text and text.startswith("Too high")
+
+
+def test_wordy_model_output_is_rejected_in_coach_style(monkeypatch):
+    monkeypatch.setattr(hint_coach, "_llm_hint", lambda *a, **k: "Try 25 " + "really " * 40)
+    assert get_hint(SITUATION, secret=30)[1] == "local"
 
 
 def test_leaky_model_output_is_rejected(monkeypatch, caplog):
@@ -102,3 +114,9 @@ def test_model_error_falls_back(monkeypatch):
     monkeypatch.setattr(hint_coach, "_llm_hint", boom)
     assert get_hint(SITUATION, secret=30)[1] == "local"
 
+
+
+def test_empty_model_reply_falls_back(monkeypatch):
+    monkeypatch.setattr(hint_coach, "_llm_hint", lambda *a, **k: "")
+    text, source = get_hint(SITUATION, secret=30)
+    assert source == "local" and text

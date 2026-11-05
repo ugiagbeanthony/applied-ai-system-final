@@ -36,15 +36,17 @@ python -m streamlit run app.py
 
 ## Sample Interactions
 
-These are real outputs from the offline coach (secret = 37).
+Real outputs from the offline coach (secret = 37). Each row shows the plain baseline and the specialized coach style the app uses.
 
-| Situation | Coach output |
-|-----------|--------------|
-| First turn, range 1-100 | *The secret is between 1 and 100. Try 50. Tip: Always guess the midpoint of the range that is still possible.* |
-| Guessed 50 → Too High, range now 1-49 | *The secret is between 1 and 49. Try 25. Tip: When a guess is too high, the secret is lower.* |
-| Guessed 25 → Too Low, range now 26-49, 2 attempts left | *The secret is between 26 and 49. Try 37. Tip: With one or two attempts left, pick the number that splits the remaining range most evenly...* |
+| Situation | Baseline (plain) | Specialized (coach) |
+|-----------|------------------|---------------------|
+| First turn, range 1-100 | The secret is between 1 and 100. Try 50. Tip: Always guess the midpoint of the range that is still possible. | Great start! Try 50: it splits 1-100 in half. |
+| Guessed 50, Too High, range 1-49 | The secret is between 1 and 49. Try 25. Tip: When a guess is too high, the secret is lower. | Too high, but you're closing in! Try 25: it splits 1-49 in half. |
+| Guessed 25, Too Low, range 26-49, 2 attempts left | The secret is between 26 and 49. Try 37. Tip: With one or two attempts left, pick the number that splits the remaining range most evenly... | Too low, keep climbing! Try 37: it splits 26-49 in half. |
 
-Notice how the retrieved tip changes with the situation. The secret is never passed to the model or the offline coach, so a suggestion that happens to equal it (as in the last row) is a lucky midpoint, not a leak. With an API key, the model writes this advice in its own words from the same passages and the guardrail checks it.
+The secret is never passed to the model or the offline coach, so a suggestion that happens to equal it (as in the last row) is a lucky midpoint, not a leak. With an API key, the model writes the advice in its own words from the retrieved notes, and the guardrail checks it.
+
+**Specialized style:** the coach style constrains tone and format (at most 25 words, an encouraging opener, one concrete number and a reason). With an API key, the prompt teaches this with three few-shot examples (`FEW_SHOT` in `hint_coach.py`) plus style rules, and the guardrail rejects replies over 30 words. Offline, the same style is produced by a template. Results against the baseline are in the Testing Summary.
 
 ## Design Decisions
 
@@ -56,7 +58,22 @@ Notice how the retrieved tip changes with the situation. The secret is never pas
 
 ## Testing Summary
 
-**Automated tests:** 14 of 14 `pytest` tests pass (`python -m pytest`). They cover the game rules and the coach, including a leaking model reply being rejected, a retry that recovers, and a model error falling back safely.
+**Automated tests:** 17 of 17 `pytest` tests pass (`python -m pytest`). They cover the game rules and the coach, including a leaking, wordy or empty model reply being rejected, a retry that recovers, and a model error falling back safely.
+
+**Test harness:** `python evaluate.py` runs the system on predefined inputs and prints three tables, then exits non-zero if any case fails. It runs offline, so results are reproducible.
+
+Predefined cases: **11/11 passed**, including injected model failures (leaking reply, wordy reply, API error, empty reply).
+
+**Specialized style vs baseline** (72 situations, offline):
+
+| Style | Avg words | Within 25 words | Encouraging opener | Names a number |
+|-------|-----------|-----------------|--------------------|----------------|
+| Baseline (plain) | 25.6 | 67% | 0% | 100% |
+| Specialized (coach) | 11.0 | 100% | 100% | 100% |
+
+These measure compliance with the style rules I defined, so they show the style is applied consistently, not that players prefer it. The harness also found two bugs while I built it: a one-number-left hint that gave no number to try, and an empty model reply that would have been shown as a blank hint. Both are fixed and tested.
+
+**Full-game simulation** (follows the coach's suggested number):
 
 **Reliability evaluation:** `python evaluate.py` plays every possible secret on every difficulty, always following the coach's suggested number, offline so it is reproducible.
 

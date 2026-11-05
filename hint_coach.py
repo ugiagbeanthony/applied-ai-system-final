@@ -17,6 +17,26 @@ logger = logging.getLogger("hint_coach")
 KNOWLEDGE_FILE = Path(__file__).parent / "knowledge" / "strategy.md"
 MODEL = os.environ.get("HINT_MODEL", "claude-haiku-5-5")
 MAX_HINT_CHARS = 400
+MAX_COACH_WORDS = 30  # guardrail; the style itself aims for 25 or fewer
+
+# Specialized style: constrained tone and format, taught to the model by example.
+STYLE_RULES = (
+    "Style: at most 25 words, one short encouraging opening phrase, then a specific "
+    "number to try and a few words on why. Warm and upbeat, no lists, no emojis."
+)
+FEW_SHOT = [
+    ({"low": 1, "high": 100, "last_outcome": None},
+     "Great start! Try 50: it splits 1-100 in half."),
+    ({"low": 1, "high": 49, "last_outcome": "Too High"},
+     "Too high, but you're closing in! Try 25 to halve 1-49."),
+    ({"low": 26, "high": 49, "last_outcome": "Too Low"},
+     "Too low, keep climbing! 37 cuts 26-49 right down the middle."),
+]
+OPENERS = {
+    "Too High": "Too high, but you're closing in!",
+    "Too Low": "Too low, keep climbing!",
+    None: "Great start!",
+}
 
 
 def load_passages(path: Path = KNOWLEDGE_FILE):
@@ -73,6 +93,16 @@ def leaks_secret(text: str, secret: int) -> bool:
     return any(int(n) == secret for n in re.findall(r"\d+", text))
 
 
+def coach_hint(situation: dict) -> str:
+    """Specialized style: short, upbeat, one concrete number and a reason."""
+    low, high = situation["low"], situation["high"]
+    mid = (low + high) // 2
+    opener = OPENERS.get(situation.get("last_outcome"), "Nice try!")
+    if low == high:
+        return f"{opener} Try {low}: it is the only number left."
+    return f"{opener} Try {mid}: it splits {low}-{high} in half."
+
+
 def local_hint(situation: dict, passages) -> str:
     """Deterministic hint built from the retrieved passages and the live range.
 
@@ -85,7 +115,7 @@ def local_hint(situation: dict, passages) -> str:
     return f"The secret is between {low} and {high}. Try {mid}. Tip: {tip}."
 
 
-def _llm_hint(situation: dict, passages, extra: str = ""):
+def _llm_hint(situation: dict, passages, extra: str = "", style: str = "coach"):
     """Ask the model for a hint. Returns text, or None when no API key is set."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
@@ -101,8 +131,14 @@ def _llm_hint(situation: dict, passages, extra: str = ""):
         f"Last result: {situation.get('last_outcome') or 'none yet'}. "
         f"Attempts left: {situation['attempts_left']}.\n"
         "Suggest a specific number to try. Never state or hint at what the secret is."
-        f"{extra}"
     )
+    if style == "coach":
+        examples = "\n".join(
+            f"Range {sit['low']}-{sit['high']}, last result {sit['last_outcome'] or 'none'} -> {out}"
+            for sit, out in FEW_SHOT
+        )
+        prompt += f"\n{STYLE_RULES}\nExamples of the style:\n{examples}"
+    prompt += extra
     client = anthropic.Anthropic(api_key=key, timeout=10.0)
     msg = client.messages.create(
         model=MODEL, max_tokens=150, messages=[{"role": "user", "content": prompt}]
@@ -110,7 +146,7 @@ def _llm_hint(situation: dict, passages, extra: str = ""):
     return "".join(b.text for b in msg.content if b.type == "text").strip()
 
 
-def get_hint(situation: dict, secret: int, passages=None):
+def get_hint(situation: dict, secret: int, passages=None, style: str = "coach"):
     """Return (hint_text, source); source is 'ai', 'ai-retry' or 'local'."""
     passages = passages if passages is not None else load_passages()
     query = build_query(situation)
@@ -120,19 +156,25 @@ def get_hint(situation: dict, secret: int, passages=None):
     extra = ""
     for attempt in range(2):
         try:
-            text = _llm_hint(situation, retrieved, extra)
+            text = _llm_hint(situation, retrieved, extra, style)
         except Exception as exc:  # network, auth, rate limit
             logger.warning("model call failed: %s", exc)
             break
         if text is None:
             logger.info("no API key set; using local hint")
             break
-        if len(text) > MAX_HINT_CHARS:
+        if not text:
+            logger.warning("hint rejected: empty reply")
+        elif len(text) > MAX_HINT_CHARS:
             logger.warning("hint rejected: too long (%d chars)", len(text))
+        elif style == "coach" and len(text.split()) > MAX_COACH_WORDS:
+            logger.warning("hint rejected: too many words (%d)", len(text.split()))
         elif leaks_secret(text, secret):
             logger.warning("hint rejected: leaked the secret")
             extra = "\nYour last answer revealed the secret. Do not mention it at all."
         else:
             return text, "ai" if attempt == 0 else "ai-retry"
 
+    if style == "coach":
+        return coach_hint(situation), "local"
     return local_hint(situation, retrieved), "local"
