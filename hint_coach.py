@@ -73,13 +73,14 @@ def leaks_secret(text: str, secret: int) -> bool:
     return any(int(n) == secret for n in re.findall(r"\d+", text))
 
 
-def local_hint(situation: dict, passages, secret=None) -> str:
-    """Deterministic hint built from the retrieved passages and the live range."""
+def local_hint(situation: dict, passages) -> str:
+    """Deterministic hint built from the retrieved passages and the live range.
+
+    The suggested number is the midpoint of the range, computed without knowing
+    the secret, so it carries no information beyond what earlier hints gave.
+    """
     low, high = situation["low"], situation["high"]
     mid = (low + high) // 2
-    if mid == secret and high > low:
-        # Suggesting the exact secret would give the game away; stay one off.
-        mid = mid + 1 if mid < high else mid - 1
     tip = passages[0][1].split(". ")[0].rstrip(".") if passages else "Split the range in half"
     return f"The secret is between {low} and {high}. Try {mid}. Tip: {tip}."
 
@@ -134,4 +135,4 @@ def get_hint(situation: dict, secret: int, passages=None):
         else:
             return text, "ai" if attempt == 0 else "ai-retry"
 
-    return local_hint(situation, retrieved, secret), "local"
+    return local_hint(situation, retrieved), "local"
