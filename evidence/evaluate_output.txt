@@ -1,0 +1,39 @@
+hint rejected: leaked the secret
+hint rejected: leaked the secret
+hint rejected: too many words (62)
+hint rejected: too many words (62)
+model call failed: down
+hint rejected: empty reply
+hint rejected: empty reply
+### Predefined cases
+
+| Case | Result |
+|------|--------|
+| parse '42' | Pass |
+| parse empty input | Pass |
+| parse 'abc' | Pass |
+| check_guess too high | Pass |
+| check_guess too low | Pass |
+| offline hint is the midpoint | Pass |
+| clean model reply is used | Pass |
+| model reply leaking secret is rejected | Pass |
+| wordy model reply is rejected | Pass |
+| model API error falls back | Pass |
+| empty model reply falls back safely | Pass |
+
+11/11 cases passed
+
+### Style comparison (offline, 72 situations)
+
+| Style | Avg words | Within 25 words | Encouraging opener | Names a number |
+|-------|-----------|-----------------|--------------------|----------------|
+| Baseline (plain) | 25.6 | 67% | 0% | 100% |
+| Specialized (coach) | 11.0 | 100% | 100% | 100% |
+
+### Full-game simulation (follows the coach's suggestion)
+
+| Difficulty | Attempts allowed | Games | Win rate | Avg guesses (wins) | Max guesses (wins) |
+|------------|------------------|-------|----------|--------------------|--------------------|
+| Easy | 6 | 20 | 100% | 3.70 | 5 |
+| Normal | 8 | 100 | 100% | 5.80 | 7 |
+| Hard | 5 | 50 | 62% | 4.16 | 5 |

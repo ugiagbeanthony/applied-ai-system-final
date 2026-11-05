@@ -1,0 +1,10 @@
+INPUT : {'low': 1, 'high': 100, 'last_outcome': None, 'attempts_left': 8}
+hint_coach INFO query='first guess binary search midpoint' retrieved=['binary search', 'first guess']
+hint_coach INFO no API key set; using local hint
+OUTPUT: ('Great start! Try 50: it splits 1-100 in half.', 'local')
+
+INPUT : {'low': 1, 'high': 49, 'last_outcome': 'Too High', 'attempts_left': 7}
+hint_coach INFO query='too high binary search midpoint' retrieved=['too high', 'binary search']
+hint_coach INFO no API key set; using local hint
+OUTPUT: ("Too high, but you're closing in! Try 25: it splits 1-49 in half.", 'local')
+

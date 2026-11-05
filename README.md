@@ -90,6 +90,87 @@ These measure compliance with the style rules I defined, so they show the style 
 - My first fix for the coach was wrong. I made the offline hint avoid suggesting the secret, and the evaluation showed it broke the strategy and dropped Hard to 0%. I reverted it, because the suggestion is computed without knowing the secret and so reveals nothing.
 - Not verified: the real model call has only been tested with mocks, and the Streamlit UI hasn't been exercised in an automated test on this machine.
 
+## Execution Evidence
+
+Everything below was produced by running the commands shown, offline with no API key. Full logs are in [`evidence/`](evidence/). Reproduce with the setup steps above.
+
+**Example inputs and outputs** (`python -c` calling `get_hint`, with logging on; secret = 37):
+
+```
+INPUT : {'low': 1, 'high': 100, 'last_outcome': None, 'attempts_left': 8}
+hint_coach INFO query='first guess binary search midpoint' retrieved=['binary search', 'first guess']
+hint_coach INFO no API key set; using local hint
+OUTPUT: ('Great start! Try 50: it splits 1-100 in half.', 'local')
+
+INPUT : {'low': 1, 'high': 49, 'last_outcome': 'Too High', 'attempts_left': 7}
+hint_coach INFO query='too high binary search midpoint' retrieved=['too high', 'binary search']
+hint_coach INFO no API key set; using local hint
+OUTPUT: ("Too high, but you're closing in! Try 25: it splits 1-49 in half.", 'local')
+```
+
+**Reliability and guardrail results** (`python evaluate.py`). The lines at the top are the guardrail's own log output as it rejected injected bad model replies:
+
+```
+hint rejected: leaked the secret
+hint rejected: leaked the secret
+hint rejected: too many words (62)
+hint rejected: too many words (62)
+model call failed: down
+hint rejected: empty reply
+hint rejected: empty reply
+### Predefined cases
+
+| Case | Result |
+|------|--------|
+| parse '42' | Pass |
+| parse empty input | Pass |
+| parse 'abc' | Pass |
+| check_guess too high | Pass |
+| check_guess too low | Pass |
+| offline hint is the midpoint | Pass |
+| clean model reply is used | Pass |
+| model reply leaking secret is rejected | Pass |
+| wordy model reply is rejected | Pass |
+| model API error falls back | Pass |
+| empty model reply falls back safely | Pass |
+
+11/11 cases passed
+
+### Style comparison (offline, 72 situations)
+
+| Style | Avg words | Within 25 words | Encouraging opener | Names a number |
+|-------|-----------|-----------------|--------------------|----------------|
+| Baseline (plain) | 25.6 | 67% | 0% | 100% |
+| Specialized (coach) | 11.0 | 100% | 100% | 100% |
+
+### Full-game simulation (follows the coach's suggestion)
+
+| Difficulty | Attempts allowed | Games | Win rate | Avg guesses (wins) | Max guesses (wins) |
+|------------|------------------|-------|----------|--------------------|--------------------|
+| Easy | 6 | 20 | 100% | 3.70 | 5 |
+| Normal | 8 | 100 | 100% | 5.80 | 7 |
+| Hard | 5 | 50 | 62% | 4.16 | 5 |
+```
+
+**Unit tests** (`python -m pytest -v`, last lines; full output in `evidence/pytest_output.txt`):
+
+```
+tests/test_game_logic.py::test_clean_model_output_is_used PASSED         [ 82%]
+tests/test_game_logic.py::test_retry_recovers_after_leak PASSED          [ 88%]
+tests/test_game_logic.py::test_model_error_falls_back PASSED             [ 94%]
+tests/test_game_logic.py::test_empty_model_reply_falls_back PASSED       [100%]
+
+============================= 17 passed in 0.07s ==============================
+```
+
+## Portfolio
+
+- **Code:** https://github.com/ugiagbeanthony/applied-ai-system-final
+- **Presentation outline:** [`PRESENTATION.md`](PRESENTATION.md)
+- **Loom walkthrough (optional):** _link to be added_
+
+**What this project says about me as an AI engineer:** I treat the model as one component that has to be grounded, checked and allowed to fail safely. I would rather ship a small system I can measure than a bigger one I can only demo. Here that meant retrieval so the advice rests on real notes, a guardrail and fallback so a bad reply never reaches the player, and an evaluation script that caught my own wrong fix before it shipped.
+
 ## Reflection
 
 Building this showed me that an AI feature is mostly the engineering around the model: deciding what it sees, checking what it says, and defining what happens when it fails. The model call is a few lines, while retrieval, validation, logging and fallbacks are most of the work. The responsible-AI reflection is in `model_card.md`.
