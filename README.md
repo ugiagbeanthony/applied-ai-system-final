@@ -1,22 +1,26 @@
 # 🎮 Game Glitch Investigator: AI Hint Coach
 
-**Original project:** *Game Glitch Investigator: The Impossible Guesser* (Modules 1-3). The original was a Streamlit number-guessing game that shipped with deliberate bugs: backwards hints, a secret number that changed on every click, and broken scoring. Its goal was to find those bugs, fix them, move the logic into `logic_utils.py`, and cover it with `pytest`.
+**Original project:** *Game Glitch Investigator: The Impossible Guesser* (Modules 1-3). It was a Streamlit number-guessing game that came with bugs on purpose: the hints were backwards, the secret number changed on every click, and the scoring was off. My job was to find the bugs, fix them, move the logic into `logic_utils.py`, and write `pytest` tests for it.
 
 ## Summary
 
-This project extends the repaired game with an **AI hint coach**. After each wrong guess, the coach looks up relevant strategy notes (retrieval), uses them to write advice for the next guess, and checks that advice before showing it, so it never reveals the secret number. It matters because it shows a pattern that applies well beyond games: ground an AI's output in retrieved information, then verify it before a user sees it. It also keeps working when the AI is unavailable.
+For this project I added an **AI hint coach** to the fixed game. After each wrong guess it looks up strategy notes, uses them to write advice for the next guess, and checks that advice before showing it to the player. I picked this because the same pattern works well outside of games: give the AI real information to work from, check what it says, and have a plan for when it fails. The game still works when the AI isn't available.
 
 ## Architecture Overview
 
-The full diagram is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd) (image in [`assets/`](assets/)).
+The diagram source is in [`diagrams/architecture.mmd`](diagrams/architecture.mmd) and the image is in [`assets/`](assets/architecture.png).
+
+![System architecture](assets/architecture.png)
+
+Here is how a guess moves through the system:
 
 1. **Input:** the player types a guess into the Streamlit app (`app.py`).
-2. **Game logic** (`logic_utils.py`): the guess is parsed, checked against the secret, and scored. The range of numbers still possible is narrowed.
-3. **Retriever** (`hint_coach.py`): the situation (last result, remaining range, attempts left) becomes a query that is matched against passages in `knowledge/strategy.md`.
-4. **Generator:** the top passages and the live range go into a model prompt (Claude). With no API key, the hint is built offline from the same passages.
-5. **Evaluator / guardrail:** a model hint that contains the secret number or is too long is rejected. The coach retries once, then falls back to a safe offline hint.
-6. **Output:** the approved hint is displayed with the result.
-7. **Checks:** `pytest` verifies the logic, retrieval, guardrail, retry and fallback. `game.log` records every guess, retrieval, rejection and error. The player is the human check on whether hints are useful.
+2. **Game logic** (`logic_utils.py`): the guess is parsed, checked against the secret and scored, and the range of numbers still possible gets narrower.
+3. **Retriever** (`hint_coach.py`): the situation (last result, remaining range, attempts left) is turned into a query and matched against the notes in `knowledge/strategy.md`.
+4. **Generator:** the best-matching notes and the current range go into a prompt for Claude. With no API key, the hint is built offline from the same notes.
+5. **Evaluator / guardrail:** a model hint is rejected if it contains the secret, is too long or is empty. The coach tries once more, then uses a safe offline hint.
+6. **Output:** the approved hint is shown with the result.
+7. **Checks:** `pytest` covers the logic, retrieval, guardrail, retry and fallback. `game.log` records every guess, retrieval, rejection and error. The player is the human check on whether the hints actually help.
 
 ## Setup Instructions
 
@@ -36,7 +40,7 @@ python -m streamlit run app.py
 
 ## Sample Interactions
 
-Real outputs from the offline coach (secret = 37). Each row shows the plain baseline and the specialized coach style the app uses.
+These are real outputs from the offline coach with the secret set to 37. Each row shows the plain baseline next to the coach style the app uses.
 
 | Situation | Baseline (plain) | Specialized (coach) |
 |-----------|------------------|---------------------|
@@ -44,23 +48,23 @@ Real outputs from the offline coach (secret = 37). Each row shows the plain base
 | Guessed 50, Too High, range 1-49 | The secret is between 1 and 49. Try 25. Tip: When a guess is too high, the secret is lower. | Too high, but you're closing in! Try 25: it splits 1-49 in half. |
 | Guessed 25, Too Low, range 26-49, 2 attempts left | The secret is between 26 and 49. Try 37. Tip: With one or two attempts left, pick the number that splits the remaining range most evenly... | Too low, keep climbing! Try 37: it splits 26-49 in half. |
 
-The secret is never passed to the model or the offline coach, so a suggestion that happens to equal it (as in the last row) is a lucky midpoint, not a leak. With an API key, the model writes the advice in its own words from the retrieved notes, and the guardrail checks it.
+The coach never gets the secret, so when a suggestion happens to match it (the last row), that's just the midpoint landing on it, not a leak. With an API key, the model writes the advice in its own words from the retrieved notes and the guardrail checks it.
 
-**Specialized style:** the coach style constrains tone and format (at most 25 words, an encouraging opener, one concrete number and a reason). With an API key, the prompt teaches this with three few-shot examples (`FEW_SHOT` in `hint_coach.py`) plus style rules, and the guardrail rejects replies over 30 words. Offline, the same style is produced by a template. Results against the baseline are in the Testing Summary.
+**Coach style:** I limited the tone and format on purpose: 25 words or fewer, an encouraging opener, one number to try and a reason. With an API key the prompt teaches this using three examples (`FEW_SHOT` in `hint_coach.py`) plus style rules, and replies over 30 words get rejected. Offline, a template produces the same style. The comparison with the baseline is in the Testing Summary.
 
 ## Design Decisions
 
-- **Retrieval over a plain prompt:** hints come from a small notes file, so the advice is grounded and the file can be edited without touching code.
-- **Simple keyword retrieval, not embeddings:** the corpus has seven short passages. Word-overlap ranking is transparent, needs no extra dependency, and is easy to test. The trade-off is that it won't scale to a large or loosely worded corpus.
-- **Offline fallback:** the app must run for anyone who clones it, with no key and no network. The trade-off is that offline hints are more templated than model hints.
-- **Guardrail after generation:** the model is told not to reveal the secret, but the code enforces it. A prompt is a request, a check is a guarantee. The trade-off is a possible extra API call on a retry.
-- **Logic separated from the UI:** `logic_utils.py` has no Streamlit imports so it can be unit tested directly.
+- **Retrieval instead of a plain prompt:** hints come from a small notes file, so the advice is based on something real and I can change it without touching code.
+- **Simple keyword retrieval, not embeddings:** there are only seven short notes, so matching on shared words is simple, easy to test and needs no extra library. The downside is that it wouldn't hold up with a big collection of notes or ones worded differently.
+- **Offline fallback:** anyone who clones the repo should be able to run it without a key or a network. The downside is that the offline hints sound more repetitive than the model's.
+- **Guardrail after generation:** the prompt tells the model not to reveal the secret, but a prompt is only a request, so the code checks the reply too. The cost is an extra API call when a retry happens.
+- **Logic separated from the UI:** `logic_utils.py` has no Streamlit imports, so I can test it directly.
 
 ## Testing Summary
 
-**Automated tests:** 17 of 17 `pytest` tests pass (`python -m pytest`). They cover the game rules and the coach, including a leaking, wordy or empty model reply being rejected, a retry that recovers, and a model error falling back safely.
+**Automated tests:** 17 of 17 `pytest` tests pass (`python -m pytest`). They cover the game rules and the coach, including rejecting a leaking, wordy or empty model reply, recovering on a retry, and falling back when the model errors.
 
-**Test harness:** `python evaluate.py` runs the system on predefined inputs and prints three tables, then exits non-zero if any case fails. It runs offline, so results are reproducible.
+**Test harness:** `python evaluate.py` runs the system on a set of predefined inputs, prints three tables, and exits with an error if any case fails. It runs offline so the results are the same every time.
 
 Predefined cases: **11/11 passed**, including injected model failures (leaking reply, wordy reply, API error, empty reply).
 
@@ -71,7 +75,7 @@ Predefined cases: **11/11 passed**, including injected model failures (leaking r
 | Baseline (plain) | 25.6 | 67% | 0% | 100% |
 | Specialized (coach) | 11.0 | 100% | 100% | 100% |
 
-These measure compliance with the style rules I defined, so they show the style is applied consistently, not that players prefer it. The harness also found two bugs while I built it: a one-number-left hint that gave no number to try, and an empty model reply that would have been shown as a blank hint. Both are fixed and tested.
+These numbers only show that the coach follows the style rules I set. They don't show that players like it better. Building the harness also turned up two bugs: when one number was left the hint didn't say which to try, and an empty model reply would have shown up as a blank hint. Both are fixed and have tests.
 
 **Full-game simulation** (follows the coach's suggested number):
 
@@ -83,12 +87,12 @@ These measure compliance with the style rules I defined, so they show the style 
 | Normal | 8 | 100 | 100% | 5.80 | 7 |
 | Hard | 5 | 50 | 62% | 4.16 | 5 |
 
-**Logging and error handling:** `game.log` records every guess, retrieval query, rejected hint and API failure. Model errors are caught and the game continues with the offline hint.
+**Logging and error handling:** `game.log` records every guess, retrieval query, rejected hint and API failure. If the model call fails, the error is caught and the game carries on with the offline hint.
 
 **What I learned**
-- Following the coach wins every Easy and Normal game, so the advice is sound. Hard is only 62% because five guesses can cover at most 31 of 50 numbers even with perfect play. That is a game-balance problem, not a coach problem, and the evaluation is what showed it.
-- My first fix for the coach was wrong. I made the offline hint avoid suggesting the secret, and the evaluation showed it broke the strategy and dropped Hard to 0%. I reverted it, because the suggestion is computed without knowing the secret and so reveals nothing.
-- Not verified: the real model call has only been tested with mocks, and the Streamlit UI hasn't been exercised in an automated test on this machine.
+- If you follow the coach you win every Easy and Normal game, so the advice holds up. Hard is only 62% because five guesses can cover at most 31 of the 50 numbers, even with perfect play. That's a problem with the game's balance, not the coach, and I only saw it because I ran the evaluation.
+- My first fix for the coach was wrong. I made the offline hint avoid suggesting the secret, and the evaluation showed that it broke the strategy and dropped Hard to 0%. I undid it, since the coach picks its number without knowing the secret and so isn't revealing anything.
+- Not checked yet: I've only tested the real model call with mocks, and I haven't run the Streamlit UI through an automated test on this machine.
 
 ## Execution Evidence
 
@@ -166,11 +170,10 @@ tests/test_game_logic.py::test_empty_model_reply_falls_back PASSED       [100%]
 ## Portfolio
 
 - **Code:** https://github.com/ugiagbeanthony/applied-ai-system-final
-- **Presentation outline:** [`PRESENTATION.md`](PRESENTATION.md)
 - **Loom walkthrough (optional):** _link to be added_
 
-**What this project says about me as an AI engineer:** I treat the model as one component that has to be grounded, checked and allowed to fail safely. I would rather ship a small system I can measure than a bigger one I can only demo. Here that meant retrieval so the advice rests on real notes, a guardrail and fallback so a bad reply never reaches the player, and an evaluation script that caught my own wrong fix before it shipped.
+**What this project says about me as an AI engineer:** I treat the model as one part of the system, not the whole thing. It needs real information to work from, its output needs to be checked, and the app needs to keep working when it fails. I'd rather build a small system I can measure than a bigger one I can only demo. In this project that meant notes the advice is based on, a guardrail and fallback so a bad reply never reaches the player, and an evaluation script that caught one of my own fixes making things worse.
 
 ## Reflection
 
-Building this showed me that an AI feature is mostly the engineering around the model: deciding what it sees, checking what it says, and defining what happens when it fails. The model call is a few lines, while retrieval, validation, logging and fallbacks are most of the work. The responsible-AI reflection is in `model_card.md`.
+The biggest thing I learned is that most of an AI feature is the work around the model: deciding what it sees, checking what it says, and deciding what happens when it fails. The model call itself is only a few lines. Retrieval, checks, logging and fallbacks took most of the effort. My responsible-AI reflection is in `model_card.md`.

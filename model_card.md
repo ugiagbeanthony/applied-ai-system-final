@@ -1,37 +1,39 @@
 # Model Card: Game Glitch Investigator Hint Coach
 
-**What it is:** a retrieval-augmented hint coach inside a Streamlit number-guessing game. It retrieves strategy notes from `knowledge/strategy.md`, uses them to write advice for the next guess (with Claude when an API key is set, offline otherwise), and checks the advice before showing it. See `README.md` for setup and results.
+**What it is:** a hint coach built into a Streamlit number-guessing game. It looks up strategy notes in `knowledge/strategy.md`, uses them to write advice for the next guess (with Claude if an API key is set, offline if not), and checks the advice before the player sees it. Setup and results are in `README.md`.
 
 ## Limitations and Biases
 
-- **Narrow scope:** the knowledge base is seven short notes that I wrote, all about binary search. The coach can only give advice that reflects that one strategy, so it has the bias of whoever wrote the notes. It has no notion of other play styles, such as guessing for fun or testing a hunch.
-- **Crude retrieval:** matching is word overlap, not meaning. A situation described with different wording would retrieve nothing relevant, and the coach would still produce a hint from the live range alone.
-- **Hard mode is not winnable by skill:** my evaluation shows that even perfect play wins only 62% of Hard games (5 attempts for 50 numbers). A hint coach cannot fix a game-balance problem, and a player might wrongly blame themselves.
-- **Offline hints are templated:** without an API key the wording is repetitive, and the tip appended to the hint can be longer than the advice itself.
-- **Model path is only partly verified:** I tested the model call with mocks, not against the live API, so real-world behavior (odd phrasing, refusals, slow responses) is unmeasured. The leak check is a simple "does the secret appear as a number" test and would miss a hint like "it's the number after thirty-six".
-- **English and digits only:** input parsing and the leak check assume ordinary digits.
+- **It only knows one strategy.** The knowledge base is seven short notes I wrote, all about binary search. Everything the coach says reflects that one way of playing, and it has no idea about other styles, like guessing for fun or going with a hunch.
+- **Retrieval is crude.** It matches on shared words, not meaning. If a situation were described in different words it could retrieve nothing useful, and the coach would just build a hint from the current range.
+- **Hard mode can't be won by skill alone.** My evaluation shows that even perfect play wins only 62% of Hard games, since 5 attempts can't cover 50 numbers. A coach can't fix that, and a player might blame themselves for it.
+- **Offline hints are repetitive.** Without an API key the wording comes from a template.
+- **The model path is only partly tested.** I tested the model call with mocks, not the live API, so I don't know how it behaves in practice (odd phrasing, refusals, slow responses).
+- **The leak check is simple.** It only looks for the secret written as digits, so it would miss something like "the number after thirty-six".
+- **Digits and English only.** Input parsing and the leak check assume ordinary digits.
 
 ## Misuse and Prevention
 
-The stakes here are low, but there are still a few ways it could go wrong:
+The stakes are low, but there are still a few ways this could go wrong.
 
-- **Cheating:** the obvious misuse is getting the answer from the coach. The secret is never passed to the model or the offline coach, so it cannot be told what the answer is. The guardrail also rejects any model reply that contains the secret, with one retry and then a safe fallback. The remaining way to "cheat" is the Developer Debug Info panel, which shows the secret on purpose for debugging. It should be removed or hidden before real use.
-- **API key and cost:** the key is read from an environment variable, never stored in the repo (`.env` is in `.gitignore`), and calls have a 10-second timeout and a small token limit so a loop cannot run up a large bill.
-- **Prompt injection:** the only user text is a number that gets parsed to an integer, and the model prompt is built from the notes file and computed values, not raw user text. That keeps this risk small. If free-text input were ever added, it would need its own sanitizing.
-- **Reuse of the pattern:** the same retrieve, generate, check design could be pointed at higher-stakes topics. Anyone doing that would need a much stronger evaluator than a leak check, and a human review step.
+- **Cheating.** The obvious misuse is getting the answer out of the coach. The secret is never given to the model or the offline coach, so it has nothing to leak. The guardrail also rejects any model reply that contains the secret, tries once more, and then falls back. The real hole is the Developer Debug Info panel, which shows the secret on purpose. I'd remove or hide it before anyone else uses the game.
+- **API key and cost.** The key comes from an environment variable and is never stored in the repo (`.env` is in `.gitignore`). Calls have a 10-second timeout and a small token limit, so a bug can't run up a big bill.
+- **Prompt injection.** The only thing a player types is a number that gets turned into an integer, and the prompt is built from my notes file and computed values, not raw player text. If I ever added free-text input I'd need to sanitize it.
+- **Reusing the pattern.** The same retrieve, generate, check design could be pointed at something with real stakes. That would need a much stronger check than mine and a human reviewing the results.
 
-## What Surprised Me While Testing Reliability
+## What Surprised Me During Testing
 
-- **My own fix made things worse.** I noticed that the offline hint sometimes suggested the exact secret, because the midpoint of the remaining range equalled it, so I made the coach dodge that number. When I built `evaluate.py` and ran it, Hard mode dropped to 0% wins. In a two-number range, dodging forced the coach to point at the wrong number every time. Without the measurement I would have shipped it and believed it was a safety improvement.
-- **The "leak" was not a leak.** The coach computes the midpoint without knowing the secret, so a suggestion that matches the secret is a coincidence that carries no information. I had been treating a correct-looking symptom as a real problem.
-- **Hard mode was the real bug.** I expected the coach to be the weak point. Instead the evaluation showed it wins every Easy and Normal game and that Hard is limited by the number of attempts.
+- **My own fix made things worse.** I noticed the offline hint sometimes suggested the exact secret because the midpoint of the range happened to equal it, so I made the coach avoid that number. Then I wrote `evaluate.py`, and Hard mode dropped to 0% wins. When only two numbers were left, avoiding the secret forced the coach to point at the wrong one every time. Without the measurement I would have kept it and thought it was a safety improvement.
+- **The "leak" wasn't a leak.** The coach picks the midpoint without knowing the secret, so when it matches, that's a coincidence that tells the player nothing. I had treated something that looked bad as if it were bad.
+- **Hard mode was the real problem.** I expected the coach to be the weak spot. The evaluation showed it wins every Easy and Normal game, and Hard is limited by the number of attempts.
+- **The test harness found bugs too.** An empty model reply would have shown up as a blank hint, and a hint with one number left didn't say which number to try. Both are fixed now.
 
 ## Collaboration with AI
 
-I used Claude Code as an assistant for this project: it wrote most of the first draft of the code, tests, diagram and documentation, and I directed it, ran things and decided what to keep.
+I used Claude Code as an assistant on this project. It wrote most of the first draft of the code, tests and diagram, and I told it what to build, ran everything, and decided what to keep.
 
-**A suggestion I accepted:** the AI proposed making the feature a retrieval-augmented hint coach where the retrieved notes actually shape the prompt, with a guardrail and an offline fallback, instead of a standalone script that prints tips next to a normal hint. I accepted it because the assignment requires the feature to change how the system behaves, and because the fallback means the project runs for anyone without an API key. I checked it by running the 14 tests and by reading the sample outputs to see that the tip changes with the situation (for example "too high" retrieves a different note from the first guess).
+**A suggestion I accepted:** the AI suggested making the feature a retrieval-based hint coach, where the retrieved notes actually shape the prompt, with a guardrail and an offline fallback. The other option was a separate script that prints tips next to a normal hint. I went with the coach because the assignment says the feature has to change how the system behaves, and the fallback means anyone can run it without an API key. I checked it by running the tests and reading the sample outputs to see that the advice changes with the situation. For example, "too high" pulls up a different note than the first guess does.
 
-**A suggestion I changed:** the AI's first fix for the offline coach suggesting the secret was to make it suggest one number away from the midpoint whenever the midpoint equalled the secret, and it added a test for it. I accepted that at first, then rejected it after the evaluation showed it broke the strategy (Hard fell to 0% wins). I reverted it, removed the test, and rewrote the README to explain that the midpoint is computed without the secret. I also changed the evaluation itself: its first version counted "hints that suggested the secret" as a failure metric, which was misleading, so I replaced it with win rate and guess counts.
+**A suggestion I changed:** my first fix for the offline coach suggesting the secret was the AI's idea. When the midpoint equalled the secret, it suggested a number one away instead, and it added a test for that. I accepted it at first. After the evaluation showed it broke the strategy and Hard fell to 0% wins, I undid it and deleted the test. I also changed the evaluation itself. The first version counted "hints that suggested the secret" as a failure, which was misleading, so I replaced it with win rate and guess counts.
 
-**What I took from it:** the AI was fast and mostly right, but it was confidently wrong about the dodge fix. Measuring the behavior, rather than trusting that a change sounded safer, is what caught it.
+**What I took from it:** the AI was fast and mostly right, but it was confidently wrong about the dodge fix. Measuring what the code actually did, instead of trusting that a change sounded safer, is what caught it.
