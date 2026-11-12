@@ -170,7 +170,7 @@ tests/test_game_logic.py::test_empty_model_reply_falls_back PASSED       [100%]
 ## Portfolio
 
 - **Code:** https://github.com/ugiagbeanthony/applied-ai-system-final
-- **Loom walkthrough (optional):** _link to be added_
+- **Loom walkthrough:** https://www.loom.com/share/51d32f3954b343aebc5c4bf14b78f635
 
 **What this project says about me as an AI engineer:** I treat the model as one part of the system, not the whole thing. It needs real information to work from, its output needs to be checked, and the app needs to keep working when it fails. I'd rather build a small system I can measure than a bigger one I can only demo. In this project that meant notes the advice is based on, a guardrail and fallback so a bad reply never reaches the player, and an evaluation script that caught one of my own fixes making things worse.
 
